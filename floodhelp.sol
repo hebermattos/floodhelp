@@ -1,27 +1,36 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
 
-pragma solidity >=0.7.0 <0.9.0;
+pragma solidity 0.8.26;
 
-struct HelpRequest{
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-    uint id;
-    string title;
-    string description;
-    string contact;
-    uint timestamp;
-    address author;
-    uint goal;
-    uint balance;
-    bool open;
 
-}
+contract FloodHelp is ReentrancyGuard {
 
-contract FloodHelp {
+    struct HelpRequest {
+        uint id;
+        string title;
+        string description;
+        string contact;
+        uint timestamp;
+        address author;
+        uint goal;
+        uint balance;
+        bool open;
+    }
 
     uint public lastId = 0;
     mapping(uint => HelpRequest) public helpRequests;
 
-    function openHelpRequest(string memory title, string memory description, string memory contact, uint goal) public{
+    event HelpRequestOpened(uint id, string title, address author);
+    event HelpRequestClosed(uint id, address author);
+    event DonationReceived(uint id, address donor, uint amount);
+
+    function openHelpRequest(string memory title, string memory description, string memory contact, uint goal) public {
+        require(bytes(title).length > 0, "Title cannot be empty");
+        require(bytes(description).length > 0, "Description cannot be empty");
+        require(bytes(contact).length > 0, "Contact cannot be empty");
+        require(goal > 0, "Goal must be greater than zero");
 
         lastId++;
 
@@ -36,45 +45,56 @@ contract FloodHelp {
             timestamp: block.timestamp,
             author: msg.sender
         });
+
+        emit HelpRequestOpened(lastId, title, msg.sender);
     }
 
-    function closeHelpRequest(uint id) public {
+    function closeHelpRequest(uint id) public nonReentrant {
         address author = helpRequests[id].author;
         uint balance = helpRequests[id].balance;
         uint goal = helpRequests[id].goal;
 
-        require(helpRequests[id].open && (msg.sender == author || balance >= goal), "You cannot close this help request");
+        require(helpRequests[id].open, "Help request is already closed");
+        require(msg.sender == author || balance >= goal, "You cannot close this help request");
 
         helpRequests[id].open = false;
 
-        if(balance > 0){
+        if (balance > 0) {
             helpRequests[id].balance = 0;
             payable(author).transfer(balance);
-        } 
+        }
+
+        emit HelpRequestClosed(id, author);
     }
 
-    function donate(uint id) public payable{
+    function donate(uint id) public payable nonReentrant {
+        require(helpRequests[id].open, "Help request is closed");
+
         helpRequests[id].balance += msg.value;
 
-        if(helpRequests[id].balance >= helpRequests[id].goal)  
+        emit DonationReceived(id, msg.sender, msg.value);
+
+        if (helpRequests[id].balance >= helpRequests[id].goal) {
             closeHelpRequest(id);
+        }
     }
 
-    function getHelpRequests(uint page, uint pageSize) public view returns (HelpRequest[] memory){
+    function getHelpRequests(uint page, uint pageSize) public view returns (HelpRequest[] memory) {
+        require(page > 0, "Page number must be greater than zero");
+        require(pageSize > 0, "Page size must be greater than zero");
 
-        HelpRequest[] memory result = new HelpRequest[](pageSize);
+        uint start = (page - 1) * pageSize + 1;
+        uint end = start + pageSize - 1;
+        end = end > lastId ? lastId : end;
 
+        HelpRequest[] memory result = new HelpRequest[](end - start + 1);
         uint resultArrayCount = 0;
-        uint HelpRequestPosition = ((page - 1) * pageSize) + 1;
 
-        do {
-            result[resultArrayCount] = helpRequests[HelpRequestPosition];
-            HelpRequestPosition++;
-            resultArrayCount++;           
+        for (uint i = start; i <= end; i++) {
+            result[resultArrayCount] = helpRequests[i];
+            resultArrayCount++;
         }
-        while (resultArrayCount < pageSize && HelpRequestPosition <= lastId);
-    
+
         return result;
     }
-    
 }
