@@ -2,11 +2,9 @@
 
 pragma solidity 0.8.26;
 
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-
-contract FloodHelp is ReentrancyGuard {
-
+contract FloodHelp {
+    
     struct HelpRequest {
         uint id;
         string title;
@@ -49,7 +47,7 @@ contract FloodHelp is ReentrancyGuard {
         emit HelpRequestOpened(lastId, title, msg.sender);
     }
 
-    function closeHelpRequest(uint id) public nonReentrant {
+    function closeHelpRequest(uint id) public {
         address author = helpRequests[id].author;
         uint balance = helpRequests[id].balance;
         uint goal = helpRequests[id].goal;
@@ -67,7 +65,7 @@ contract FloodHelp is ReentrancyGuard {
         emit HelpRequestClosed(id, author);
     }
 
-    function donate(uint id) public payable nonReentrant {
+    function donate(uint id) public payable {
         require(helpRequests[id].open, "Help request is closed");
 
         helpRequests[id].balance += msg.value;
